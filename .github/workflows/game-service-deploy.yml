@@ -1,0 +1,67 @@
+name: Game Service CI/CD - Blue Green
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/game-service
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🧾 Checkout code
+        uses: actions/checkout@v3
+
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: ⚙️ Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: 📡 Update kubeconfig for EKS
+        run: aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
+
+      - name: 🐳 Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: 🏗️ Build and push Docker image
+        run: |
+          docker build -t $IMAGE_NAME:latest .
+          docker push $IMAGE_NAME:latest
+
+      - name: 🚀 Deploy Green Version to EKS
+        run: |
+          kubectl apply -f k8s/game-service/game-service-green.yaml
+
+      - name: ✅ Health Check on Green Pod
+        run: |
+          GREEN_POD=$(kubectl get pods -l app=game-service,version=green -o jsonpath="{.items[0].metadata.name}")
+          kubectl wait --for=condition=Ready pod/$GREEN_POD --timeout=90s
+
+      - name: 🗃️ Run Prisma DB Push in Green Pod
+        run: |
+          GREEN_POD=$(kubectl get pods -l app=game-service,version=green -o jsonpath="{.items[0].metadata.name}")
+          kubectl exec $GREEN_POD -- npx prisma db push
+
+      - name: 🔁 Switch Service to Green
+        run: |
+          kubectl patch svc game-service -p '{"spec": {"selector": {"app": "game-service", "version": "green"}}}'
+
+      - name: 🔄 Restart Deployment (optional safety)
+        run: |
+          kubectl rollout restart deployment game-service-green
+
+      - name: 🧹 Clean Up Blue Version
+        if: success()
+        run: |
+          kubectl delete deployment game-service-blue || true
