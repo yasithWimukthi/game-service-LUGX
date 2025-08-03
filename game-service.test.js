@@ -17,9 +17,10 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:3000/api/games';
 
         console.log(`📡 Testing POST ${BASE_URL}`);
         const postData = {
-            title: 'Automated Test Game',
+            name: 'Automated Test Game',
             price: 19.99,
-            platform: 'PC',
+            releaseDate: "2022-02-25T00:00:00.000Z",
+            category: 'RPG',
         };
 
         const postResponse = await axios.post(BASE_URL, postData);
