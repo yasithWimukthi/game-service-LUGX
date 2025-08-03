@@ -53,6 +53,48 @@ jobs:
           GREEN_POD=$(kubectl get pods -l app=game-service,version=green -o jsonpath="{.items[0].metadata.name}")
           kubectl exec $GREEN_POD -- npx prisma migrate deploy
 
+      - name: 🧪 Run Integration Tests
+        run: |
+          GAME_IP=$(kubectl get svc game-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
+          echo "Testing endpoint: http://$GAME_IP:3000/api/games"
+          echo 'Installing dependencies...'
+          npm install axios
+          
+          echo 'Creating test file...'
+          cat <<EOF > game-service.test.js
+          const axios = require('axios');
+          const BASE_URL = "http://$GAME_IP:3000/api/games";
+
+          (async () => {
+            try {
+              console.log(\`📡 Testing GET \${BASE_URL}\`);
+              const getRes = await axios.get(BASE_URL);
+              if (getRes.status === 200) {
+                console.log("✅ GET /api/games passed");
+              } else {
+                console.error(\`❌ GET failed: \${getRes.status}\`);
+                process.exit(1);
+              }
+
+              console.log(\`📡 Testing POST \${BASE_URL}\`);
+              const postData = { title: "CI Test Game", price: 19.99, platform: "PC" };
+              const postRes = await axios.post(BASE_URL, postData);
+              if ([200, 201].includes(postRes.status)) {
+                console.log("✅ POST /api/games passed");
+              } else {
+                console.error(\`❌ POST failed: \${postRes.status}\`);
+                process.exit(1);
+              }
+            } catch (err) {
+              console.error("❌ Error:", err.message);
+              process.exit(1);
+            }
+          })();
+          EOF
+
+          echo 'Running test...'
+          node game-service.test.js
+
       - name: 🔁 Switch Service to Green
         run: |
           kubectl patch svc game-service -p '{"spec": {"selector": {"app": "game-service", "version": "green"}}}'
