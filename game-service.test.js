@@ -23,7 +23,9 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:3000/api/games';
             category: 'RPG',
         };
 
-        const postResponse = await axios.post(BASE_URL, postData);
+        const postResponse = await axios.post(BASE_URL, postData, {  headers: {
+                "Content-Type": "application/json"
+            }});
         if (postResponse.status === 201 || postResponse.status === 200) {
             console.log('✅ POST /api/games passed');
         } else {
