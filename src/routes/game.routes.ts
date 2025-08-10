@@ -9,7 +9,7 @@ router.get('/', getAllGames);
 router.get('/:id', getGameById);
 
 router.get('/hello/ping', (req, res) => {
-    res.send('Hello World - After Blue Green Deployment - Game Service');
+    res.send('Hello World - After Blue Green Deployment - Game Service - 1');
 });
 
 export default router;
